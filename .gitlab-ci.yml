@@ -1,0 +1,47 @@
+image: docker:20.10.16
+
+services:
+  - docker:20.10.16-dind
+
+variables:
+  DOCKER_REGISTRY: "cr.yandex"
+  REGISTRY_ID: "crpvkrjsojmh1d1of35i"
+  IMAGE_NAME: "python_web_app"
+  IMAGE_TAG: "$CI_COMMIT_SHORT_SHA"
+  VM_IP_ADDR: "51.250.86.111"
+  VM_USER_NAME: "ubuntu"
+stages:
+  - build
+  - deploy
+
+build:
+  stage: build
+  script:
+    - docker build -t "$DOCKER_REGISTRY/$REGISTRY_ID/$IMAGE_NAME:$IMAGE_TAG" .
+    - echo "$CI_REGISTRY_PASSWORD" | base64 -d > service_account.json
+    - cat service_account.json | docker login $DOCKER_REGISTRY -u "json_key" --password-stdin
+    - docker push "$DOCKER_REGISTRY/$REGISTRY_ID/$IMAGE_NAME:$IMAGE_TAG"
+    - printf "DOCKER_REGISTRY=%s\nREGISTRY_ID=%s\nIMAGE_NAME=%s\nCI_COMMIT_SHORT_SHA=%s\n" "$DOCKER_REGISTRY" "$REGISTRY_ID" "$IMAGE_NAME" "$CI_COMMIT_SHORT_SHA" > .env
+    - tar czf app_deploy.tar.gz .env compose.yaml proxy.yaml haproxy/ nginx/
+  artifacts:
+    paths:
+      - app_deploy.tar.gz
+  only:
+    - main
+
+deploy:
+  stage: deploy
+  script:
+    - eval $(ssh-agent -s)
+    - echo "$SSH_PRIVATE_KEY" | base64 -d | tr -d '\r' | ssh-add -
+    - >
+      ssh -o StrictHostKeyChecking=no ${VM_USER_NAME}@${VM_IP_ADDR} "
+      echo \"${CI_REGISTRY_PASSWORD}\" | base64 -d > service_account.json &&
+      cat service_account.json | docker login ${DOCKER_REGISTRY} -u 'json_key' --password-stdin
+      "
+    - ssh -o StrictHostKeyChecking=no ${VM_USER_NAME}@${VM_IP_ADDR} 'mkdir -p ~/app'
+    - scp -o StrictHostKeyChecking=no app_deploy.tar.gz ${VM_USER_NAME}@${VM_IP_ADDR}:~/app/
+    - ssh -o StrictHostKeyChecking=no ${VM_USER_NAME}@${VM_IP_ADDR} ''
+    - ssh -o StrictHostKeyChecking=no ${VM_USER_NAME}@${VM_IP_ADDR} 'cd ~/app && tar xzf app_deploy.tar.gz && docker compose up -d'
+  only:
+    - main

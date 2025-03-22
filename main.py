@@ -13,6 +13,7 @@ db_table=os.environ.get('DB_TABLE', 'requests')
 
 # Подключение к базе данных MySQL
 db = mysql.connector.connect(
+ssl_disabled=True,
 host=db_host,
 user=db_user,
 password=db_password,

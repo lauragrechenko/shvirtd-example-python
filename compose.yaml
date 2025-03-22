@@ -2,15 +2,12 @@ include:
   - proxy.yaml 
 services:
   web:
-    image: cr.yandex/crptts4g1l8v86eq0m46/virt-04-python-app:latest
+    image: $DOCKER_REGISTRY/$REGISTRY_ID/$IMAGE_NAME:${CI_COMMIT_SHORT_SHA}
+    env_file:
+      - .env
+      - /etc/myapp/db.conf
     restart: always
     networks:
       backend:
         ipv4_address: 172.20.0.5
-    environment:
-      DB_HOST: ${MYSQL_HOST}
-      DB_USER: ${MYSQL_USER}
-      DB_PASSWORD: ${MYSQL_PASSWORD}
-      DB_NAME: ${MYSQL_DATABASE}
-      DB_TABLE: ${MYSQL_TABLE}
   
